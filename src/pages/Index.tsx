@@ -1,10 +1,10 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Icon from "@/components/ui/icon";
 
 const WEDDING_DATE = new Date("2026-06-20T17:00:00");
 
 function useCountdown(target: Date) {
-  const calc = () => {
+  const calc = useCallback(() => {
     const diff = target.getTime() - Date.now();
     if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0 };
     return {
@@ -13,12 +13,12 @@ function useCountdown(target: Date) {
       minutes: Math.floor((diff % 3600000) / 60000),
       seconds: Math.floor((diff % 60000) / 1000),
     };
-  };
+  }, [target]);
   const [time, setTime] = useState(calc);
   useEffect(() => {
     const t = setInterval(() => setTime(calc()), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [calc]);
   return time;
 }
 
@@ -26,13 +26,14 @@ function useInView(threshold = 0.15) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
+    const el = ref.current;
     const obs = new IntersectionObserver(
       ([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect(); } },
       { threshold }
     );
-    if (ref.current) obs.observe(ref.current);
+    if (el) obs.observe(el);
     return () => obs.disconnect();
-  }, []);
+  }, [threshold]);
   return { ref, visible };
 }
 
@@ -65,7 +66,6 @@ function GoldDivider() {
 function LeafPattern() {
   return (
     <svg className="absolute inset-0 w-full h-full" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      {/* Top-left botanical */}
       <g opacity="0.08" fill="#C9A96E">
         <ellipse cx="60" cy="80" rx="30" ry="55" transform="rotate(-30 60 80)" />
         <ellipse cx="100" cy="40" rx="20" ry="45" transform="rotate(-60 100 40)" />
@@ -74,7 +74,6 @@ function LeafPattern() {
         <line x1="60" y1="80" x2="60" y2="0" stroke="#C9A96E" strokeWidth="1.5" />
         <line x1="100" y1="40" x2="115" y2="-10" stroke="#C9A96E" strokeWidth="1" />
       </g>
-      {/* Top-right botanical */}
       <g opacity="0.08" fill="#C9A96E" transform="translate(800,0) scale(-1,1)">
         <ellipse cx="60" cy="80" rx="30" ry="55" transform="rotate(-30 60 80)" />
         <ellipse cx="100" cy="40" rx="20" ry="45" transform="rotate(-60 100 40)" />
@@ -82,13 +81,11 @@ function LeafPattern() {
         <ellipse cx="130" cy="90" rx="14" ry="35" transform="rotate(-80 130 90)" />
         <line x1="60" y1="80" x2="60" y2="0" stroke="#C9A96E" strokeWidth="1.5" />
       </g>
-      {/* Bottom-left */}
       <g opacity="0.06" fill="#E8C4B8" transform="translate(0,600) scale(1,-1)">
         <ellipse cx="50" cy="60" rx="25" ry="50" transform="rotate(-20 50 60)" />
         <ellipse cx="90" cy="30" rx="18" ry="38" transform="rotate(-50 90 30)" />
         <ellipse cx="20" cy="110" rx="15" ry="32" transform="rotate(15 20 110)" />
       </g>
-      {/* Bottom-right */}
       <g opacity="0.06" fill="#E8C4B8" transform="translate(800,600) scale(-1,-1)">
         <ellipse cx="50" cy="60" rx="25" ry="50" transform="rotate(-20 50 60)" />
         <ellipse cx="90" cy="30" rx="18" ry="38" transform="rotate(-50 90 30)" />
@@ -104,6 +101,22 @@ export default function Index() {
   const [rsvpName, setRsvpName] = useState("");
   const [rsvpSent, setRsvpSent] = useState(false);
 
+  // Music
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [musicSrc, setMusicSrc] = useState("");
+  const musicInputRef = useRef<HTMLInputElement>(null);
+
+  // Video
+  const [videoSrc, setVideoSrc] = useState("");
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Photos gallery
+  const [photos, setPhotos] = useState<string[]>([]);
+  const photosInputRef = useRef<HTMLInputElement>(null);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
   const pad = (n: number) => String(n).padStart(2, "0");
 
   const timeline = [
@@ -114,16 +127,139 @@ export default function Index() {
     { time: "22:00", event: "Вечерняя программа и дискотека" },
   ];
 
+  const toggleMusic = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (musicPlaying) {
+      audio.pause();
+      setMusicPlaying(false);
+    } else {
+      audio.play();
+      setMusicPlaying(true);
+    }
+  };
+
+  const handleMusicFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setMusicSrc(url);
+    setTimeout(() => {
+      if (audioRef.current) {
+        audioRef.current.play();
+        setMusicPlaying(true);
+      }
+    }, 100);
+  };
+
+  const handleVideoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setVideoSrc(URL.createObjectURL(file));
+  };
+
+  const handlePhotos = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const urls = files.map((f) => URL.createObjectURL(f));
+    setPhotos((prev) => [...prev, ...urls]);
+  };
+
+  const removePhoto = (idx: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   return (
     <div className="min-h-screen bg-ivory font-montserrat text-text overflow-x-hidden">
 
+      {/* ---- MUSIC PLAYER (floating) ---- */}
+      {musicSrc && (
+        <audio ref={audioRef} src={musicSrc} loop />
+      )}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
+        {!musicSrc && (
+          <button
+            onClick={() => musicInputRef.current?.click()}
+            className="bg-ivory border border-gold text-gold hover:bg-gold hover:text-ivory text-xs font-montserrat tracking-widest uppercase px-4 py-2 shadow-md transition-all duration-300 flex items-center gap-2"
+          >
+            <Icon name="Music" size={14} /> Добавить музыку
+          </button>
+        )}
+        {musicSrc && (
+          <button
+            onClick={toggleMusic}
+            className="w-12 h-12 rounded-full bg-ivory border border-gold flex items-center justify-center shadow-lg hover:bg-gold hover:text-ivory transition-all duration-300 group"
+            title={musicPlaying ? "Пауза" : "Воспроизвести"}
+          >
+            <Icon name={musicPlaying ? "Pause" : "Play"} size={18} className="text-gold group-hover:text-ivory" />
+          </button>
+        )}
+        <input ref={musicInputRef} type="file" accept="audio/*" className="hidden" onChange={handleMusicFile} />
+      </div>
+
+      {/* ---- VIDEO SECTION ---- */}
+      <section className="relative w-full bg-text overflow-hidden" style={{ minHeight: "100svh" }}>
+        <div className="absolute inset-0 bg-gradient-to-b from-text/80 via-transparent to-text/60 z-10" />
+
+        {videoSrc ? (
+          <video
+            ref={videoRef}
+            src={videoSrc}
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        ) : (
+          /* Заглушка до загрузки видео */
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-text via-[#2a1a10] to-text">
+            <LeafPattern />
+            <div className="relative z-10 flex flex-col items-center gap-4 opacity-40">
+              <svg viewBox="0 0 120 120" className="w-32 h-32 text-gold" fill="none" stroke="currentColor" strokeWidth="1">
+                <circle cx="60" cy="60" r="28" />
+                <circle cx="60" cy="60" r="18" />
+                <circle cx="60" cy="60" r="8" fill="currentColor" opacity="0.3" />
+                <path d="M 60 32 Q 72 48 72 60 Q 72 72 60 88" strokeWidth="0.5" />
+                <path d="M 60 32 Q 48 48 48 60 Q 48 72 60 88" strokeWidth="0.5" />
+                <ellipse cx="60" cy="60" rx="28" ry="10" strokeWidth="0.5" />
+              </svg>
+              <p className="font-cormorant text-gold text-xl italic">Кольцо</p>
+            </div>
+          </div>
+        )}
+
+        {/* Текст поверх видео */}
+        <div className="relative z-20 flex flex-col items-center justify-center min-h-screen px-6 text-center">
+          <p className="font-montserrat text-xs tracking-[0.4em] uppercase text-gold/80 mb-6 opacity-0 animate-fade-up">
+            Начало новой главы
+          </p>
+          <h2 className="font-cormorant text-6xl md:text-8xl font-light text-ivory leading-none opacity-0 animate-fade-up-delay">
+            Артур <span className="text-gold italic">&</span> Марина
+          </h2>
+          <p className="font-cormorant text-2xl italic text-ivory/60 mt-4 font-light opacity-0 animate-fade-up-delay2">
+            20 июня 2026
+          </p>
+
+          {/* Кнопка загрузки видео */}
+          <button
+            onClick={() => videoInputRef.current?.click()}
+            className="mt-10 border border-gold/50 text-gold/70 hover:border-gold hover:text-gold font-montserrat text-xs tracking-widest uppercase px-8 py-3 transition-all duration-500 opacity-0 animate-fade-up-delay3"
+          >
+            {videoSrc ? "Заменить видео" : "Загрузить видео с кольцом"}
+          </button>
+          <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoFile} />
+
+          {/* Scroll down */}
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce opacity-40">
+            <Icon name="ChevronDown" size={28} className="text-gold" />
+          </div>
+        </div>
+      </section>
+
       {/* ---- HERO ---- */}
       <section className="relative min-h-screen flex flex-col items-center justify-center px-6 py-20 overflow-hidden">
-        {/* Фон с акварельным градиентом */}
         <div className="absolute inset-0 bg-gradient-to-b from-blush via-ivory to-ivory-dark" />
-        {/* Ботанический SVG узор */}
         <LeafPattern />
-        {/* Золотой оверлей */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_20%,rgba(201,169,110,0.08)_0%,transparent_60%)]" />
 
         <div className="relative z-10 text-center max-w-2xl mx-auto">
@@ -135,16 +271,13 @@ export default function Index() {
             <span className="block text-gold italic font-extralight">&amp;</span>
             Марина
           </h1>
-
-          <div className="w-0 h-px bg-gold mx-auto my-6 animate-line-grow" style={{ width: undefined }} />
-
+          <div className="w-0 h-px bg-gold mx-auto my-6 animate-line-grow" />
           <p className="font-cormorant text-2xl md:text-3xl italic text-text-light opacity-0 animate-fade-up-delay2 font-light">
             20 июня 2026 года
           </p>
           <p className="font-montserrat text-xs tracking-[0.25em] uppercase text-gold-dark mt-2 opacity-0 animate-fade-up-delay3">
             Ресторан «Империалъ» · Николо-Березовка
           </p>
-
           <div className="mt-10 opacity-0 animate-fade-up-delay3">
             <button
               onClick={() => setRsvpOpen(true)}
@@ -154,8 +287,6 @@ export default function Index() {
             </button>
           </div>
         </div>
-
-        {/* Scroll arrow */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce opacity-40">
           <Icon name="ChevronDown" size={24} className="text-gold" />
         </div>
@@ -194,32 +325,21 @@ export default function Index() {
         <Section className="max-w-2xl mx-auto text-center">
           <p className="font-montserrat text-xs tracking-[0.35em] uppercase text-gold mb-6">Дата и место</p>
           <h2 className="font-cormorant text-5xl md:text-6xl font-light text-text mb-10">Детали торжества</h2>
-
           <div className="grid md:grid-cols-3 gap-8 mt-10">
-            <div className="flex flex-col items-center gap-3 p-6 border border-gold-light">
-              <div className="w-10 h-10 rounded-full border border-gold flex items-center justify-center">
-                <Icon name="Calendar" size={18} className="text-gold" />
+            {[
+              { icon: "Calendar", label: "Дата", main: "20 июня 2026", sub: "суббота" },
+              { icon: "Clock", label: "Время", main: "17:00", sub: "начало церемонии" },
+              { icon: "MapPin", label: "Место", main: "Империалъ", sub: "Николо-Березовка" },
+            ].map(({ icon, label, main, sub }) => (
+              <div key={label} className="flex flex-col items-center gap-3 p-6 border border-gold-light">
+                <div className="w-10 h-10 rounded-full border border-gold flex items-center justify-center">
+                  <Icon name={icon} fallback="Circle" size={18} className="text-gold" />
+                </div>
+                <p className="font-montserrat text-xs tracking-widest uppercase text-gold">{label}</p>
+                <p className="font-cormorant text-2xl font-light text-text">{main}</p>
+                <p className="font-montserrat text-xs text-text-light">{sub}</p>
               </div>
-              <p className="font-montserrat text-xs tracking-widest uppercase text-gold">Дата</p>
-              <p className="font-cormorant text-2xl font-light text-text">20 июня 2026</p>
-              <p className="font-montserrat text-xs text-text-light">суббота</p>
-            </div>
-            <div className="flex flex-col items-center gap-3 p-6 border border-gold-light">
-              <div className="w-10 h-10 rounded-full border border-gold flex items-center justify-center">
-                <Icon name="Clock" size={18} className="text-gold" />
-              </div>
-              <p className="font-montserrat text-xs tracking-widest uppercase text-gold">Время</p>
-              <p className="font-cormorant text-2xl font-light text-text">17:00</p>
-              <p className="font-montserrat text-xs text-text-light">начало церемонии</p>
-            </div>
-            <div className="flex flex-col items-center gap-3 p-6 border border-gold-light">
-              <div className="w-10 h-10 rounded-full border border-gold flex items-center justify-center">
-                <Icon name="MapPin" size={18} className="text-gold" />
-              </div>
-              <p className="font-montserrat text-xs tracking-widest uppercase text-gold">Место</p>
-              <p className="font-cormorant text-2xl font-light text-text">Империалъ</p>
-              <p className="font-montserrat text-xs text-text-light">Николо-Березовка</p>
-            </div>
+            ))}
           </div>
         </Section>
       </section>
@@ -231,7 +351,6 @@ export default function Index() {
           <p className="font-montserrat text-xs tracking-[0.35em] uppercase text-gold mb-6">История нашей любви</p>
           <h2 className="font-cormorant text-5xl md:text-6xl font-light text-text mb-10">Наш путь</h2>
           <GoldDivider />
-
           <div className="space-y-10 text-left mt-8">
             {[
               { year: "2019", icon: "Heart", title: "Первая встреча", desc: "Мы встретились в один обычный осенний вечер, который изменил всё. Взгляды пересеклись — и мир стал другим." },
@@ -244,7 +363,7 @@ export default function Index() {
                   <div className="w-10 h-10 rounded-full border border-gold flex items-center justify-center bg-ivory">
                     <Icon name={icon} fallback="Star" size={16} className="text-gold" />
                   </div>
-                  {i < 3 && <div className="w-px flex-1 bg-gold-light mt-2" style={{ height: 40 }} />}
+                  {i < 3 && <div className="w-px bg-gold-light mt-2" style={{ height: 40 }} />}
                 </div>
                 <div className="pb-6">
                   <span className="font-montserrat text-xs tracking-widest text-gold uppercase">{year}</span>
@@ -257,13 +376,88 @@ export default function Index() {
         </Section>
       </section>
 
+      {/* ---- СЧАСТЛИВЫЕ МОМЕНТЫ (ФОТО-ГАЛЕРЕЯ) ---- */}
+      <section className="py-20 px-6 bg-ivory relative overflow-hidden">
+        <LeafPattern />
+        <Section className="max-w-4xl mx-auto text-center relative z-10">
+          <p className="font-montserrat text-xs tracking-[0.35em] uppercase text-gold mb-6">Фотографии</p>
+          <h2 className="font-cormorant text-5xl md:text-6xl font-light text-text mb-4">Счастливые моменты</h2>
+          <p className="font-cormorant text-xl italic text-text-light font-light mb-10">
+            Мгновения, которые останутся в сердце навсегда
+          </p>
+          <GoldDivider />
+
+          {/* Сетка фото */}
+          {photos.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-8 mb-6">
+              {photos.map((src, i) => (
+                <div
+                  key={i}
+                  className="relative group overflow-hidden border border-gold-light cursor-pointer"
+                  style={{ aspectRatio: "4/3" }}
+                  onClick={() => setLightboxSrc(src)}
+                >
+                  <img
+                    src={src}
+                    alt={`Момент ${i + 1}`}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  {/* Gold overlay on hover */}
+                  <div className="absolute inset-0 bg-gold/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  {/* Remove button */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removePhoto(i); }}
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-text/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-text"
+                  >
+                    <Icon name="X" size={12} className="text-ivory" />
+                  </button>
+                  {/* Expand icon */}
+                  <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <Icon name="Maximize2" size={16} className="text-ivory drop-shadow" />
+                  </div>
+                </div>
+              ))}
+
+              {/* Add more tile */}
+              <button
+                onClick={() => photosInputRef.current?.click()}
+                className="border border-dashed border-gold/40 hover:border-gold flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:bg-gold/5"
+                style={{ aspectRatio: "4/3" }}
+              >
+                <Icon name="Plus" size={24} className="text-gold/50" />
+                <span className="font-montserrat text-xs tracking-widest uppercase text-gold/50">Добавить</span>
+              </button>
+            </div>
+          )}
+
+          {/* Пустое состояние */}
+          {photos.length === 0 && (
+            <button
+              onClick={() => photosInputRef.current?.click()}
+              className="mt-8 w-full max-w-lg mx-auto border border-dashed border-gold/40 hover:border-gold flex flex-col items-center justify-center gap-4 py-16 transition-all duration-300 hover:bg-gold/5 group"
+            >
+              <div className="w-16 h-16 rounded-full border border-gold/30 group-hover:border-gold flex items-center justify-center transition-all duration-300">
+                <Icon name="ImagePlus" size={28} className="text-gold/40 group-hover:text-gold transition-colors duration-300" />
+              </div>
+              <div>
+                <p className="font-cormorant text-2xl font-light text-text-light group-hover:text-text transition-colors">
+                  Добавьте ваши фотографии
+                </p>
+                <p className="font-montserrat text-xs text-gold/50 mt-1 tracking-widest uppercase">Нажмите для выбора</p>
+              </div>
+            </button>
+          )}
+
+          <input ref={photosInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handlePhotos} />
+        </Section>
+      </section>
+
       {/* ---- ПРОГРАММА ---- */}
       <section className="py-20 px-6 bg-ivory-dark">
         <Section className="max-w-2xl mx-auto text-center">
           <p className="font-montserrat text-xs tracking-[0.35em] uppercase text-gold mb-6">Программа</p>
           <h2 className="font-cormorant text-5xl md:text-6xl font-light text-text mb-10">Расписание дня</h2>
           <GoldDivider />
-
           <div className="mt-8 space-y-0">
             {timeline.map(({ time, event }, i) => (
               <div key={i} className="flex items-center gap-6 py-5 border-b border-gold-light last:border-0">
@@ -283,14 +477,12 @@ export default function Index() {
           <h2 className="font-cormorant text-5xl md:text-6xl font-light text-text mb-4">Dress Code</h2>
           <p className="font-cormorant text-2xl italic text-text-light font-light mb-10">Классика и элегантность</p>
           <GoldDivider />
-
           <div className="grid md:grid-cols-2 gap-8 mt-8">
             <div className="p-8 border border-gold-light bg-blush/30">
               <p className="font-montserrat text-xs tracking-widest uppercase text-gold mb-4">Для гостей</p>
               <p className="font-cormorant text-3xl font-light text-text mb-3">Вечерний наряд</p>
               <p className="font-montserrat text-sm text-text-light leading-relaxed">
-                Просим вас придерживаться нежной цветовой палитры: слоновая кость, пастельные тона, золото.
-                Избегайте белого и чёрного.
+                Просим вас придерживаться нежной цветовой палитры: слоновая кость, пастельные тона, золото. Избегайте белого и чёрного.
               </p>
             </div>
             <div className="p-8 border border-gold-light bg-ivory-dark/50">
@@ -332,7 +524,6 @@ export default function Index() {
           <p className="font-montserrat text-xs tracking-[0.35em] uppercase text-gold mb-6">Контакты</p>
           <h2 className="font-cormorant text-5xl md:text-6xl font-light text-text mb-10">Свяжитесь с нами</h2>
           <GoldDivider />
-
           <div className="grid md:grid-cols-2 gap-6 mt-8">
             <div className="p-8 border border-gold-light text-center">
               <div className="w-12 h-12 rounded-full border border-gold flex items-center justify-center mx-auto mb-4">
@@ -388,6 +579,24 @@ export default function Index() {
         </div>
       </footer>
 
+      {/* ---- LIGHTBOX ---- */}
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 bg-text/90 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <button className="absolute top-4 right-4 text-ivory/60 hover:text-ivory transition-colors">
+            <Icon name="X" size={28} />
+          </button>
+          <img
+            src={lightboxSrc}
+            alt="Фото"
+            className="max-w-full max-h-[90vh] object-contain shadow-2xl border border-gold/20"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
       {/* ---- RSVP MODAL ---- */}
       {rsvpOpen && (
         <div
@@ -401,7 +610,6 @@ export default function Index() {
             >
               <Icon name="X" size={20} />
             </button>
-
             {rsvpSent ? (
               <div className="text-center py-6">
                 <Icon name="Heart" size={40} className="text-gold mx-auto mb-4" />
